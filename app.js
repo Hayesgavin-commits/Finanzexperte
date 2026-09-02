@@ -340,12 +340,14 @@
       .join("");
   }
   function fields() {
+    const isRecurring = $("recurring").value === "yes";
+    if (!isRecurring) $("frequency").value = "monthly";
+    $("frequencyLabel").classList.toggle("hidden", !isRecurring);
     $("weekdayLabel").classList.toggle(
       "hidden",
-      $("frequency").value !== "weekly",
+      !isRecurring || $("frequency").value !== "weekly",
     );
-    $("endLabel").classList.toggle("hidden", $("frequency").value === "once");
-    $("stopLabel").classList.toggle("hidden", $("frequency").value === "once");
+    $("stopLabel").classList.toggle("hidden", !isRecurring);
     $("usageLabel").classList.toggle("hidden", kind !== "expense");
     if (kind === "income") $("usage").value = "regular";
     const saving = kind === "expense" && $("usage").value === "saving";
@@ -372,13 +374,26 @@
     ].forEach((x) => ($(x).value = ""));
     $("category").value = "";
     $("date").value = dateToday();
-    $("frequency").value = "once";
+    $("recurring").value = "no";
+    $("frequency").value = "monthly";
     $("weekday").value = "1";
     $("usage").value = "regular";
-    $("formLabel").textContent = "Neue Buchung";
+    $("formLabel").textContent = "Umsatz erfassen";
+    $("kindTitle").textContent = "Neu";
     $("saveBtn").textContent = "Buchung hinzufügen";
     $("cancelBtn").classList.add("hidden");
+    $("entryForm").classList.add("hidden");
+    $("transactionChoice").classList.add("hidden");
+    $("newTransactionBtn").classList.remove("hidden");
     fields();
+  }
+  function openNew(v) {
+    setKind(v);
+    $("transactionChoice").classList.add("hidden");
+    $("newTransactionBtn").classList.add("hidden");
+    $("entryForm").classList.remove("hidden");
+    $("formLabel").textContent = "Neuer Umsatz";
+    $("kindTitle").textContent = v === "income" ? "Einnahme" : "Ausgabe";
   }
   function edit(id) {
     const x = entries.find((a) => a.id === id);
@@ -389,6 +404,7 @@
     $("date").value = x.date;
     $("category").value = x.category;
     $("item").value = x.item || x.note || "";
+    $("recurring").value = x.frequency === "once" ? "no" : "yes";
     $("frequency").value = x.frequency;
     $("weekday").value = String(x.weekday ?? 1);
     $("usage").value = x.usage || "regular";
@@ -400,6 +416,9 @@
     $("formLabel").textContent = "Buchung bearbeiten";
     $("saveBtn").textContent = "Änderung speichern";
     $("cancelBtn").classList.remove("hidden");
+    $("newTransactionBtn").classList.add("hidden");
+    $("transactionChoice").classList.add("hidden");
+    $("entryForm").classList.remove("hidden");
     scrollTo({ top: 420, behavior: "smooth" });
   }
   function view(main, tab) {
@@ -452,14 +471,14 @@
       category: $("category").value,
       item: $("item").value.trim(),
       note: $("item").value.trim(),
-      frequency: $("frequency").value,
+      frequency: $("recurring").value === "yes" ? $("frequency").value : "once",
       weekday: Number($("weekday").value),
       usage: kind === "expense" ? $("usage").value : "regular",
       isSaving: kind === "expense" && $("usage").value === "saving",
       savingGoal: $("savingGoal").value.trim(),
       savingTarget: number($("savingTarget").value) || 0,
       endMonth: $("endMonth").value,
-      stopDate: $("frequency").value === "once" ? "" : $("stopDate").value,
+      stopDate: $("recurring").value === "no" ? "" : $("stopDate").value,
     };
     entries = editing
       ? entries.map((a) => (a.id === editing ? x : a))
@@ -467,8 +486,13 @@
     reset();
     save();
   };
-  $("expenseBtn").onclick = () => setKind("expense");
-  $("incomeBtn").onclick = () => setKind("income");
+  $("newTransactionBtn").onclick = () => {
+    $("newTransactionBtn").classList.add("hidden");
+    $("transactionChoice").classList.remove("hidden");
+  };
+  $("expenseBtn").onclick = () => openNew("expense");
+  $("incomeBtn").onclick = () => openNew("income");
+  $("recurring").onchange = fields;
   $("frequency").onchange = fields;
   $("usage").onchange = fields;
   $("cancelBtn").onclick = reset;

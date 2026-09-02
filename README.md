@@ -1,4 +1,4 @@
-# Finanzexperte 1.3.2 – GitHub Pages
+# Finanzexperte 1.4.0 – GitHub Pages
 
 Alle Dateien in das Stammverzeichnis des GitHub-Repositorys kopieren. Unter GitHub `Settings → Pages` die Quelle `Deploy from a branch`, Branch `main` und Ordner `/(root)` auswählen.
 
@@ -7,3 +7,5 @@ Die Daten werden ausschließlich im lokalen Browser gespeichert. Unterstützt we
 Wiederkehrende Buchungen können über „Beenden“ oder beim Bearbeiten über „Nicht mehr buchen ab“ taggenau beendet werden.
 
 In der Gesamtübersicht kann jeder Monat über „Anzeigen“ geöffnet werden. Die Buchungszeilen der Monatsansicht sind auswählbar und lassen sich direkt bearbeiten.
+
+Neue Buchungen werden über „Neuer Umsatz“ und die anschließende Wahl zwischen Einnahme und Ausgabe erfasst. Wiederkehrende Umsätze können monatlich, vierteljährlich oder wöchentlich mit Wochentag angelegt werden. Ausgaben lassen sich als normale Ausgabe oder als Ansparung verbuchen.

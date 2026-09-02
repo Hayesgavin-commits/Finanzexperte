@@ -249,6 +249,23 @@
       .switch .income {
         color: var(--green);
       }
+      .new-turnover {
+        width: 100%;
+        border: 0;
+        border-radius: 13px;
+        padding: 14px;
+        background: var(--navy);
+        color: white;
+        font-weight: 850;
+        font-size: 16px;
+      }
+      .choice-title {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        margin-bottom: 7px;
+        text-align: center;
+      }
       .form {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -417,7 +434,7 @@
             <div class="sub">Einnahmen und Ausgaben im Blick</div>
           </div>
         </div>
-        <div class="version">Version 1.3.2</div>
+        <div class="version">Version 1.4.0</div>
       </header>
       <section class="balance">
         <span>Kontostand zu Monatsbeginn</span
@@ -433,7 +450,7 @@
       <nav class="tabs">
         <button id="monthTab" class="active">Monat</button
         ><button id="overviewTab">Gesamtübersicht</button
-        ><button id="savingsTab">Ansparen</button>
+        ><button id="savingsTab">Ansparung</button>
       </nav>
       <main id="monthView">
         <section class="card">
@@ -457,28 +474,27 @@
         <section class="card">
           <div class="head">
             <div>
-              <small id="formLabel">Neue Buchung</small>
-              <h2 id="kindTitle">Ausgabe</h2>
+              <small id="formLabel">Umsatz erfassen</small>
+              <h2 id="kindTitle">Neu</h2>
             </div>
             <b>＋</b>
           </div>
-          <div class="switch">
-            <button id="expenseBtn" type="button" class="active expense">
-              Ausgabe</button
-            ><button id="incomeBtn" type="button" class="income">
-              Einnahme
-            </button>
+          <button id="newTransactionBtn" type="button" class="new-turnover">
+            ＋ Neuer Umsatz
+          </button>
+          <div id="transactionChoice" class="hidden">
+            <p class="choice-title">Bitte Umsatzart auswählen</p>
+            <div class="switch">
+              <button id="expenseBtn" type="button" class="active expense">
+                Ausgabe</button
+              ><button id="incomeBtn" type="button" class="income">
+                Einnahme
+              </button>
+            </div>
           </div>
-          <form id="entryForm" class="form">
+          <form id="entryForm" class="form hidden">
             <label
-              >Betrag<input
-                id="amount"
-                inputmode="decimal"
-                placeholder="0,00 €"
-                required /></label
-            ><label>Buchungsdatum<input id="date" type="date" required /></label
-            ><label
-              >Kategorie<select id="category" required>
+              >Art<select id="category" required>
                 <option value="">Bitte auswählen</option>
                 <option>Kredit</option>
                 <option>Versicherungen</option>
@@ -501,12 +517,23 @@
                 placeholder="z. B. Miete"
                 required /></label
             ><label
-              >Art<select id="frequency">
-                <option value="once">Einmalig</option>
+              >Betrag<input
+                id="amount"
+                inputmode="decimal"
+                placeholder="0,00 €"
+                required /></label
+            ><label>Buchungsdatum<input id="date" type="date" required /></label
+            ><label
+              >Wiederkehrend?<select id="recurring">
+                <option value="no">Nein</option>
+                <option value="yes">Ja</option>
+              </select></label
+            ><label id="frequencyLabel" class="hidden"
+              >Wiederholung<select id="frequency">
                 <option value="monthly">Monatlich</option>
-                <option value="weekly">Wöchentlich am …</option>
                 <option value="quarterly">Vierteljährlich</option>
-                <option value="yearly">Jährlich</option>
+                <option value="weekly">Wöchentlich</option>
+                <option value="yearly" hidden>Jährlich</option>
               </select></label
             ><label id="weekdayLabel" class="hidden"
               >Wochentag<select id="weekday">
@@ -519,15 +546,13 @@
                 <option value="0">Sonntag</option>
               </select></label
             ><label id="usageLabel"
-              >Verwendung<select id="usage">
-                <option value="regular">Normale Ausgabe</option>
+              >Ausgabenart<select id="usage">
+                <option value="regular">Ausgabe</option>
                 <option value="saving">Ansparen</option>
               </select></label
-            ><label id="endLabel" class="hidden"
-              >Wiederholen bis (optional)<input
-                id="endMonth"
-                type="month" /></label
-            ><label id="stopLabel" class="hidden"
+            ><input id="endMonth" type="hidden" /><label
+              id="stopLabel"
+              class="hidden"
               >Nicht mehr buchen ab<input id="stopDate" type="date" /></label
             ><label id="savingGoalLabel" class="hidden"
               >Sparziel<input
@@ -619,7 +644,7 @@
           <div class="head">
             <div>
               <small>Rücklagen</small>
-              <h2>Ansparen</h2>
+              <h2>Ansparung</h2>
             </div>
             <b>◎</b>
           </div>
