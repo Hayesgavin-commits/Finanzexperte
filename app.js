@@ -163,7 +163,9 @@
     $("entries").innerHTML = s.a
       .map(
         (x) =>
-          "<tr><td>" +
+          '<tr class="selectable-row" data-entry="' +
+          x.id +
+          '"><td>' +
           (x.frequency !== "once" ? "ab " : "") +
           new Date(x.date + "T12:00").toLocaleDateString("de-DE") +
           (x.n > 1 ? "<br><small>" + x.n + "× in diesem Monat</small>" : "") +
@@ -206,6 +208,12 @@
     document
       .querySelectorAll("[data-edit]")
       .forEach((b) => (b.onclick = () => edit(b.dataset.edit)));
+    document.querySelectorAll("[data-entry]").forEach(
+      (row) =>
+        (row.onclick = (event) => {
+          if (!event.target.closest("button")) edit(row.dataset.entry);
+        }),
+    );
     document
       .querySelectorAll("[data-stop]")
       .forEach((b) => (b.onclick = () => stopEntry(b.dataset.stop)));
@@ -269,7 +277,9 @@
             cash.format(b) +
             "</td><td>" +
             s.n +
-            "</td></tr>",
+            '</td><td><button class="open-month" data-month="' +
+            k +
+            '">Anzeigen</button></td></tr>',
         );
         ti += s.inc;
         to += s.out;
@@ -280,6 +290,16 @@
     $("allOut").textContent = cash.format(to);
     $("allResult").textContent = cash.format(ti - to);
     $("allCount").textContent = tn;
+    document.querySelectorAll("[data-month]").forEach(
+      (button) =>
+        (button.onclick = () => {
+          const parts = button.dataset.month.split("-").map(Number);
+          shown = new Date(parts[0], parts[1] - 1, 1);
+          view("monthView", "monthTab");
+          render();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }),
+    );
   }
   function renderSavings() {
     const g = {};

@@ -1,4 +1,4 @@
-const C = "finanzexperte-v1.3.1",
+const C = "finanzexperte-v1.3.2",
   F = ["./", "./index.html", "./app.js", "./manifest.webmanifest"];
 self.addEventListener("install", (e) =>
   e.waitUntil(
