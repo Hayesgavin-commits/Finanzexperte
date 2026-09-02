@@ -50,10 +50,18 @@
   function count(x, m) {
     const md = diff(x.date.slice(0, 7), m);
     if (md < 0 || (x.endMonth && m > x.endMonth)) return 0;
-    if (x.frequency === "once") return md === 0 ? 1 : 0;
-    if (x.frequency === "monthly") return 1;
-    if (x.frequency === "quarterly") return md % 3 === 0 ? 1 : 0;
-    if (x.frequency === "yearly") return md % 12 === 0 ? 1 : 0;
+    const stop = x.stopDate ? new Date(x.stopDate + "T00:00") : null;
+    if (x.frequency === "once")
+      return md === 0 && (!stop || new Date(x.date + "T12:00") < stop) ? 1 : 0;
+    if (["monthly", "quarterly", "yearly"].includes(x.frequency)) {
+      if (x.frequency === "quarterly" && md % 3 !== 0) return 0;
+      if (x.frequency === "yearly" && md % 12 !== 0) return 0;
+      const p = m.split("-").map(Number),
+        wantedDay = Number(x.date.slice(8, 10)),
+        last = new Date(p[0], p[1], 0).getDate(),
+        due = new Date(p[0], p[1] - 1, Math.min(wantedDay, last), 12);
+      return !stop || due < stop ? 1 : 0;
+    }
     if (x.frequency === "weekly") {
       const p = m.split("-").map(Number),
         last = new Date(p[0], p[1], 0).getDate(),
@@ -61,7 +69,12 @@
       let n = 0;
       for (let i = 1; i <= last; i++) {
         const d = new Date(p[0], p[1] - 1, i, 12);
-        if (d >= start && d.getDay() === Number(x.weekday)) n++;
+        if (
+          d >= start &&
+          (!stop || d < stop) &&
+          d.getDay() === Number(x.weekday)
+        )
+          n++;
       }
       return n;
     }
@@ -158,7 +171,13 @@
           (x.frequency !== "once" ? "repeat" : "") +
           '">' +
           art(x) +
-          "</span></td><td>" +
+          "</span>" +
+          (x.stopDate
+            ? "<br><small>beendet ab " +
+              new Date(x.stopDate + "T12:00").toLocaleDateString("de-DE") +
+              "</small>"
+            : "") +
+          "</td><td>" +
           safe(x.category) +
           "</td><td>" +
           safe(x.item || "–") +
@@ -175,7 +194,11 @@
           cash.format(x.amount * x.n) +
           '</td><td><div class="rowbuttons"><button data-edit="' +
           x.id +
-          '">✎</button><button class="delete" data-delete="' +
+          '">✎</button>' +
+          (x.frequency !== "once"
+            ? '<button data-stop="' + x.id + '">Beenden</button>'
+            : "") +
+          '<button class="delete" data-delete="' +
           x.id +
           '">×</button></div></td></tr>',
       )
@@ -183,6 +206,9 @@
     document
       .querySelectorAll("[data-edit]")
       .forEach((b) => (b.onclick = () => edit(b.dataset.edit)));
+    document
+      .querySelectorAll("[data-stop]")
+      .forEach((b) => (b.onclick = () => stopEntry(b.dataset.stop)));
     document.querySelectorAll("[data-delete]").forEach(
       (b) =>
         (b.onclick = () => {
@@ -212,11 +238,13 @@
       (x) =>
         (last = Math.max(
           last,
-          x.endMonth
-            ? +x.endMonth.slice(0, 4)
-            : x.frequency === "once"
-              ? +x.date.slice(0, 4)
-              : now + 1,
+          x.stopDate
+            ? +x.stopDate.slice(0, 4)
+            : x.endMonth
+              ? +x.endMonth.slice(0, 4)
+              : x.frequency === "once"
+                ? +x.date.slice(0, 4)
+                : now + 1,
         )),
     );
     for (let y = first; y <= last; y++)
@@ -297,6 +325,7 @@
       $("frequency").value !== "weekly",
     );
     $("endLabel").classList.toggle("hidden", $("frequency").value === "once");
+    $("stopLabel").classList.toggle("hidden", $("frequency").value === "once");
     $("usageLabel").classList.toggle("hidden", kind !== "expense");
     if (kind === "income") $("usage").value = "regular";
     const saving = kind === "expense" && $("usage").value === "saving";
@@ -313,9 +342,14 @@
   }
   function reset() {
     editing = "";
-    ["amount", "item", "endMonth", "savingGoal", "savingTarget"].forEach(
-      (x) => ($(x).value = ""),
-    );
+    [
+      "amount",
+      "item",
+      "endMonth",
+      "stopDate",
+      "savingGoal",
+      "savingTarget",
+    ].forEach((x) => ($(x).value = ""));
     $("category").value = "";
     $("date").value = dateToday();
     $("frequency").value = "once";
@@ -339,6 +373,7 @@
     $("weekday").value = String(x.weekday ?? 1);
     $("usage").value = x.usage || "regular";
     $("endMonth").value = x.endMonth || "";
+    $("stopDate").value = x.stopDate || "";
     $("savingGoal").value = x.savingGoal || "";
     $("savingTarget").value = x.savingTarget || "";
     fields();
@@ -356,6 +391,24 @@
     );
     $(main).classList.remove("hidden");
     $(tab).classList.add("active");
+  }
+  function stopEntry(id) {
+    const x = entries.find((a) => a.id === id);
+    if (!x || x.frequency === "once") return;
+    const value = prompt(
+      "Ab welchem Datum soll diese Buchung nicht mehr gebucht werden?\nBitte im Format JJJJ-MM-TT eingeben:",
+      x.stopDate || dateToday(),
+    );
+    if (value === null) return;
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      Number.isNaN(new Date(value + "T12:00").getTime())
+    ) {
+      alert("Bitte ein gültiges Datum im Format JJJJ-MM-TT eingeben.");
+      return;
+    }
+    x.stopDate = value;
+    save();
   }
   $("balanceForm").onsubmit = (e) => {
     e.preventDefault();
@@ -386,6 +439,7 @@
       savingGoal: $("savingGoal").value.trim(),
       savingTarget: number($("savingTarget").value) || 0,
       endMonth: $("endMonth").value,
+      stopDate: $("frequency").value === "once" ? "" : $("stopDate").value,
     };
     entries = editing
       ? entries.map((a) => (a.id === editing ? x : a))
