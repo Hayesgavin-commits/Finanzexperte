@@ -47,7 +47,7 @@
         font: inherit;
       }
       .app {
-        max-width: 900px;
+        max-width: 1400px;
         margin: auto;
       }
       header {
@@ -308,6 +308,75 @@
         background: #e9efec;
         color: var(--ink);
       }
+      .choice-actions {
+        display: flex;
+        justify-content: center;
+      }
+      .choice-actions .cancel {
+        border: 0;
+        border-radius: 12px;
+        padding: 10px 22px;
+        font-weight: 850;
+      }
+      .booking-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px;
+        margin-bottom: 10px;
+      }
+      .booking-options button,
+      .booking-item {
+        border: 0;
+        border-radius: 12px;
+        padding: 12px;
+        font-weight: 850;
+      }
+      .booking-options button {
+        background: var(--navy);
+        color: white;
+      }
+      .booking-list {
+        display: grid;
+        gap: 7px;
+        margin: 12px 0;
+      }
+      .booking-item {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        text-align: left;
+        background: #f0f5f2;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .booking-item small {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .booking-item .booking-amount {
+        align-self: center;
+      }
+      .booking-item.booked {
+        background: var(--green2);
+        color: var(--green);
+        cursor: default;
+      }
+      .status {
+        display: inline-block;
+        border-radius: 99px;
+        padding: 4px 8px;
+        background: #fff0c8;
+        color: #7b5900;
+        font-size: 11px;
+        font-weight: 850;
+      }
+      .status.booked {
+        background: var(--green2);
+        color: var(--green);
+      }
       .tablewrap {
         overflow: auto;
         border: 1px solid var(--line);
@@ -381,6 +450,96 @@
         padding: 7px 10px;
         white-space: nowrap;
       }
+      .matrixwrap {
+        max-height: 68vh;
+      }
+      .matrix {
+        min-width: 1650px;
+      }
+      .matrix th,
+      .matrix td {
+        min-width: 116px;
+        padding: 8px 9px;
+        text-align: right;
+        border-right: 1px solid #809084;
+        border-bottom: 1px solid #809084;
+        white-space: nowrap;
+      }
+      .matrix th:first-child,
+      .matrix td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        min-width: 180px;
+        max-width: 180px;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .matrix thead th {
+        z-index: 3;
+        background: #fff9a8;
+        color: #17251f;
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: 12px;
+      }
+      .matrix thead th:first-child {
+        z-index: 4;
+      }
+      .month-head {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font-weight: 850;
+        cursor: pointer;
+      }
+      .month-head small {
+        font-weight: 600;
+      }
+      .matrix .income-row th,
+      .matrix .income-row td,
+      .matrix .balance-row th,
+      .matrix .balance-row td,
+      .matrix .income-total th,
+      .matrix .income-total td {
+        background: #b7e5aa;
+      }
+      .matrix .expense-row th,
+      .matrix .expense-row td,
+      .matrix .expense-total th,
+      .matrix .expense-total td {
+        background: #e6a9dd;
+      }
+      .matrix .result-row th,
+      .matrix .result-row td,
+      .matrix .closing-row th,
+      .matrix .closing-row td {
+        background: #f3e583;
+        font-weight: 900;
+      }
+      .matrix .income-total th,
+      .matrix .income-total td,
+      .matrix .expense-total th,
+      .matrix .expense-total td {
+        font-weight: 900;
+      }
+      .matrix td.editable-cell {
+        cursor: pointer;
+      }
+      .matrix td.editable-cell:hover {
+        outline: 3px solid #15815b;
+        outline-offset: -3px;
+      }
+      .matrix td.one-off {
+        background: #55c6df;
+      }
+      .overview-help {
+        margin: -4px 0 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
       .delete {
         color: var(--red);
         background: var(--red2);
@@ -434,10 +593,10 @@
             <div class="sub">Einnahmen und Ausgaben im Blick</div>
           </div>
         </div>
-        <div class="version">Version 1.4.0</div>
+        <div class="version">Version 1.6.0</div>
       </header>
       <section class="balance">
-        <span>Kontostand zu Monatsbeginn</span
+        <span id="balanceLabel">Kontostand im ausgewählten Monat</span
         ><strong id="balance">0,00 €</strong>
         <form id="balanceForm">
           <input
@@ -472,6 +631,31 @@
           </div>
         </section>
         <section class="card">
+          <button id="bookBtn" type="button" class="new-turnover">
+            ✓ Buchen
+          </button>
+          <div id="bookingPanel" class="hidden">
+            <p class="choice-title">Was möchtest du buchen?</p>
+            <div id="bookingModeChoice" class="booking-options">
+              <button id="existingPostBtn" type="button">
+                Bestehender Posten
+              </button>
+              <button id="newPostBtn" type="button">Neuer Posten</button>
+            </div>
+            <div id="existingBookingArea" class="hidden">
+              <div id="bookingList" class="booking-list"></div>
+              <div id="bookingEmpty" class="empty">
+                Noch keine Posten gespeichert.
+              </div>
+            </div>
+            <div class="choice-actions">
+              <button type="button" id="bookingCancelBtn" class="cancel">
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        </section>
+        <section class="card">
           <div class="head">
             <div>
               <small id="formLabel">Umsatz erfassen</small>
@@ -489,6 +673,11 @@
                 Ausgabe</button
               ><button id="incomeBtn" type="button" class="income">
                 Einnahme
+              </button>
+            </div>
+            <div class="choice-actions">
+              <button type="button" id="choiceCancelBtn" class="cancel">
+                Abbrechen
               </button>
             </div>
           </div>
@@ -566,7 +755,7 @@
             /></label>
             <div class="actions">
               <button class="save" id="saveBtn">Buchung hinzufügen</button
-              ><button type="button" id="cancelBtn" class="cancel hidden">
+              ><button type="button" id="cancelBtn" class="cancel">
                 Abbrechen
               </button>
             </div>
@@ -589,6 +778,7 @@
                   <th>Kategorie</th>
                   <th>Posten</th>
                   <th>Verwendung</th>
+                  <th>Status</th>
                   <th>Betrag</th>
                   <th>Ändern</th>
                 </tr>
@@ -603,35 +793,25 @@
         <section class="card">
           <div class="head">
             <div>
-              <small>Alle Buchungen</small>
-              <h2>Monat auswählen</h2>
+              <small>Monatsdarstellung</small>
+              <h2>13-Monats-Übersicht</h2>
             </div>
           </div>
-          <div class="tablewrap">
-            <table>
+          <div class="monthnav">
+            <button id="overviewPrev" type="button">‹</button>
+            <h2 id="overviewRange"></h2>
+            <button id="overviewNext" type="button">›</button>
+          </div>
+          <p class="overview-help">
+            Monat anklicken, um die Detailansicht zu öffnen. Ein Betrag öffnet
+            die zugehörige Buchung zur Bearbeitung.
+          </p>
+          <div class="tablewrap matrixwrap">
+            <table class="matrix">
               <thead>
-                <tr>
-                  <th>Monat</th>
-                  <th>Einnahmen</th>
-                  <th>Ausgaben</th>
-                  <th>Ergebnis</th>
-                  <th>Kontostand Monatsende</th>
-                  <th>Buchungen</th>
-                  <th>Details</th>
-                </tr>
+                <tr id="monthsHead"></tr>
               </thead>
               <tbody id="months"></tbody>
-              <tfoot>
-                <tr>
-                  <th>Gesamt</th>
-                  <th id="allIn"></th>
-                  <th id="allOut"></th>
-                  <th id="allResult"></th>
-                  <th>–</th>
-                  <th id="allCount"></th>
-                  <th>–</th>
-                </tr>
-              </tfoot>
             </table>
           </div>
           <div id="monthsEmpty" class="empty">

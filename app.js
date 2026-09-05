@@ -19,9 +19,11 @@
       "Samstag",
     ];
   let entries = [],
-    opening = 0,
+    monthlyBalances = {},
+    bookings = [],
     kind = "expense",
     editing = "",
+    bookAfterSave = false,
     shown = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const monthKey = (d) =>
       d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"),
@@ -30,6 +32,12 @@
       return monthKey(d) + "-" + String(d.getDate()).padStart(2, "0");
     },
     number = (v) => Number(String(v).replace(",", ".")),
+    localDate = (d) =>
+      d.getFullYear() +
+      "-" +
+      String(d.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(d.getDate()).padStart(2, "0"),
     safe = (s) =>
       String(s).replace(
         /[&<>"']/g,
@@ -47,26 +55,28 @@
       B = b.split("-").map(Number);
     return (B[0] - A[0]) * 12 + B[1] - A[1];
   }
-  function count(x, m) {
+  function occurrenceDates(x, m) {
     const md = diff(x.date.slice(0, 7), m);
-    if (md < 0 || (x.endMonth && m > x.endMonth)) return 0;
+    if (md < 0 || (x.endMonth && m > x.endMonth)) return [];
     const stop = x.stopDate ? new Date(x.stopDate + "T00:00") : null;
-    if (x.frequency === "once")
-      return md === 0 && (!stop || new Date(x.date + "T12:00") < stop) ? 1 : 0;
+    if (x.frequency === "once") {
+      const due = new Date(x.date + "T12:00");
+      return md === 0 && (!stop || due < stop) ? [x.date] : [];
+    }
     if (["monthly", "quarterly", "yearly"].includes(x.frequency)) {
-      if (x.frequency === "quarterly" && md % 3 !== 0) return 0;
-      if (x.frequency === "yearly" && md % 12 !== 0) return 0;
+      if (x.frequency === "quarterly" && md % 3 !== 0) return [];
+      if (x.frequency === "yearly" && md % 12 !== 0) return [];
       const p = m.split("-").map(Number),
         wantedDay = Number(x.date.slice(8, 10)),
         last = new Date(p[0], p[1], 0).getDate(),
         due = new Date(p[0], p[1] - 1, Math.min(wantedDay, last), 12);
-      return !stop || due < stop ? 1 : 0;
+      return !stop || due < stop ? [localDate(due)] : [];
     }
     if (x.frequency === "weekly") {
       const p = m.split("-").map(Number),
         last = new Date(p[0], p[1], 0).getDate(),
         start = new Date(x.date + "T12:00");
-      let n = 0;
+      const dates = [];
       for (let i = 1; i <= last; i++) {
         const d = new Date(p[0], p[1] - 1, i, 12);
         if (
@@ -74,17 +84,58 @@
           (!stop || d < stop) &&
           d.getDay() === Number(x.weekday)
         )
-          n++;
+          dates.push(localDate(d));
       }
-      return n;
+      return dates;
     }
-    return 0;
+    return [];
+  }
+  function count(x, m) {
+    return occurrenceDates(x, m).length;
+  }
+  function bookingKey(id, date) {
+    return id + "@" + date;
+  }
+  function isBooked(id, date) {
+    return bookings.some((b) => b.key === bookingKey(id, date));
+  }
+  function dateInMonth(x, m) {
+    const p = m.split("-").map(Number),
+      wantedDay = Number(x.date.slice(8, 10)) || 1,
+      last = new Date(p[0], p[1], 0).getDate();
+    return localDate(new Date(p[0], p[1] - 1, Math.min(wantedDay, last), 12));
   }
   function rows(m) {
-    return entries
-      .map((x) => ({ ...x, n: count(x, m) }))
-      .filter((x) => x.n)
-      .sort((a, b) => b.date.localeCompare(a.date));
+    const scheduled = entries.flatMap((x) =>
+        occurrenceDates(x, m).map((occurrenceDate) => ({
+          ...x,
+          n: 1,
+          occurrenceDate,
+          booked: isBooked(x.id, occurrenceDate),
+        })),
+      ),
+      keys = new Set(scheduled.map((x) => bookingKey(x.id, x.occurrenceDate))),
+      extra = bookings
+        .filter((b) => b.month === m && !keys.has(b.key))
+        .map((b) => ({
+          id: b.entryId,
+          kind: b.kind,
+          amount: b.amount,
+          date: b.occurrenceDate,
+          occurrenceDate: b.occurrenceDate,
+          category: b.category || "sonstiges",
+          item: b.item || "Posten",
+          note: b.item || "Posten",
+          frequency: "once",
+          usage: b.usage || "regular",
+          savingGoal: b.savingGoal || "",
+          n: 1,
+          booked: true,
+          bookingOnly: true,
+        }));
+    return [...scheduled, ...extra].sort((a, b) =>
+      b.occurrenceDate.localeCompare(a.occurrenceDate),
+    );
   }
   function sums(m) {
     const a = rows(m);
@@ -99,28 +150,18 @@
       n: a.reduce((s, x) => s + x.n, 0),
     };
   }
+  function openingBalance(m) {
+    return Number(monthlyBalances[m]) || 0;
+  }
   function balanceAt(m) {
-    const anchor =
-        localStorage.getItem("fe-balance-month") || monthKey(new Date()),
-      n = diff(anchor, m);
-    let v = opening,
-      d;
-    if (n >= 0) {
-      d = new Date(anchor + "-01T12:00");
-      for (let i = 0; i <= n; i++) {
-        const s = sums(monthKey(d));
-        v += s.inc - s.out;
-        d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-      }
-    } else {
-      d = new Date(m + "-01T12:00");
-      for (let i = 0; i < Math.abs(n); i++) {
-        const s = sums(monthKey(d));
-        v -= s.inc - s.out;
-        d = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-      }
-    }
-    return v;
+    const remaining = rows(m).filter((x) => !x.booked),
+      inc = remaining
+        .filter((x) => x.kind === "income")
+        .reduce((sum, x) => sum + x.amount, 0),
+      out = remaining
+        .filter((x) => x.kind === "expense")
+        .reduce((sum, x) => sum + x.amount, 0);
+    return openingBalance(m) + inc - out;
   }
   function art(x) {
     return x.frequency === "monthly"
@@ -135,13 +176,16 @@
   }
   function save() {
     localStorage.setItem("fe-entries", JSON.stringify(entries));
-    localStorage.setItem("fe-balance", opening);
+    localStorage.setItem("fe-month-balances", JSON.stringify(monthlyBalances));
+    localStorage.setItem("fe-bookings", JSON.stringify(bookings));
     render();
   }
   function render() {
     const m = monthKey(shown),
       s = sums(m);
-    $("balance").textContent = cash.format(opening);
+    $("balance").textContent = cash.format(openingBalance(m));
+    $("balanceLabel").textContent =
+      "Kontostand im " + monthFmt.format(shown);
     $("monthTitle").textContent = $("listTitle").textContent =
       monthFmt.format(shown);
     $("income").textContent = cash.format(s.inc);
@@ -155,7 +199,7 @@
       document.querySelector(".summary").after(f);
     }
     f.innerHTML =
-      "<span>Kontostand am Monatsende – wird in den Folgemonat übernommen</span><b>" +
+      "<span>Kontostand am Monatsende – ohne Übertrag in den Folgemonat</span><b>" +
       cash.format(balanceAt(m)) +
       "</b>";
     $("count").textContent = s.n;
@@ -166,9 +210,7 @@
           '<tr class="selectable-row" data-entry="' +
           x.id +
           '"><td>' +
-          (x.frequency !== "once" ? "ab " : "") +
-          new Date(x.date + "T12:00").toLocaleDateString("de-DE") +
-          (x.n > 1 ? "<br><small>" + x.n + "× in diesem Monat</small>" : "") +
+          new Date(x.occurrenceDate + "T12:00").toLocaleDateString("de-DE") +
           '</td><td><span class="badge ' +
           (x.frequency !== "once" ? "repeat" : "") +
           '">' +
@@ -189,6 +231,11 @@
               safe(x.savingGoal || x.item) +
               "</span>"
             : "Normal") +
+          '</td><td><span class="status ' +
+          (x.booked ? "booked" : "") +
+          '">' +
+          (x.booked ? "Gebucht" : "Offen") +
+          "</span>" +
           '</td><td class="money ' +
           (x.kind === "income" ? "in" : "out") +
           '">' +
@@ -226,70 +273,86 @@
     );
     renderMonths();
     renderSavings();
+    renderBookingList();
   }
   function renderMonths() {
-    if (!entries.length) {
-      $("monthsEmpty").classList.remove("hidden");
-      $("months").innerHTML = "";
-      return;
-    }
     $("monthsEmpty").classList.add("hidden");
-    const ys = entries.map((x) => +x.date.slice(0, 4)),
-      now = new Date().getFullYear();
-    let first = Math.min(...ys, now),
-      last = Math.max(...ys, now),
-      out = [],
-      ti = 0,
-      to = 0,
-      tn = 0;
-    entries.forEach(
-      (x) =>
-        (last = Math.max(
-          last,
-          x.stopDate
-            ? +x.stopDate.slice(0, 4)
-            : x.endMonth
-              ? +x.endMonth.slice(0, 4)
-              : x.frequency === "once"
-                ? +x.date.slice(0, 4)
-                : now + 1,
-        )),
-    );
-    for (let y = first; y <= last; y++)
-      for (let mo = 1; mo <= 12; mo++) {
-        const k = y + "-" + String(mo).padStart(2, "0"),
-          s = sums(k),
-          b = balanceAt(k);
-        out.push(
-          "<tr><td>" +
-            monthFmt.format(new Date(y, mo - 1, 1)) +
-            '</td><td class="money in">' +
-            cash.format(s.inc) +
-            '</td><td class="money out">' +
-            cash.format(s.out) +
-            '</td><td class="' +
-            (s.inc - s.out < 0 ? "negative" : "") +
-            '">' +
-            cash.format(s.inc - s.out) +
-            '</td><td class="' +
-            (b < 0 ? "negative" : "") +
-            '">' +
-            cash.format(b) +
-            "</td><td>" +
-            s.n +
-            '</td><td><button class="open-month" data-month="' +
-            k +
-            '">Anzeigen</button></td></tr>',
+    const monthList = [];
+    for (let i = 0; i < 13; i++) {
+      const d = new Date(shown.getFullYear(), shown.getMonth() + i, 1);
+      monthList.push({ key: monthKey(d), date: d });
+    }
+    const visible = entries.filter((x) =>
+        monthList.some((m) => rows(m.key).some((r) => r.id === x.id)),
+      ),
+      incomes = visible.filter((x) => x.kind === "income"),
+      expenses = visible.filter((x) => x.kind === "expense"),
+      amountCell = (x, m) => {
+        const relevant = rows(m.key).filter((r) => r.id === x.id);
+        if (!relevant.length) return "<td></td>";
+        const value = relevant.reduce((sum, r) => sum + r.amount, 0);
+        return (
+          '<td class="editable-cell ' +
+          (x.frequency === "once" || relevant.every((r) => r.bookingOnly)
+            ? "one-off"
+            : "") +
+          '" data-edit="' +
+          x.id +
+          '" title="Buchung bearbeiten">' +
+          cash.format(value) +
+          "</td>"
         );
-        ti += s.inc;
-        to += s.out;
-        tn += s.n;
-      }
-    $("months").innerHTML = out.join("");
-    $("allIn").textContent = cash.format(ti);
-    $("allOut").textContent = cash.format(to);
-    $("allResult").textContent = cash.format(ti - to);
-    $("allCount").textContent = tn;
+      },
+      entryRow = (x, type) =>
+        '<tr class="' +
+        type +
+        '-row"><th title="' +
+        safe(x.category) +
+        '">' +
+        safe(x.item || x.category) +
+        "</th>" +
+        monthList.map((m) => amountCell(x, m)).join("") +
+        "</tr>",
+      totalRow = (label, cls, getter) =>
+        '<tr class="' +
+        cls +
+        '"><th>' +
+        label +
+        "</th>" +
+        monthList
+          .map((m) => "<td>" + cash.format(getter(sums(m.key), m.key)) + "</td>")
+          .join("") +
+        "</tr>";
+    $("monthsHead").innerHTML =
+      "<th>Posten</th>" +
+      monthList
+        .map(
+          (m) =>
+            '<th><button class="month-head" data-month="' +
+            m.key +
+            '">' +
+            m.date.toLocaleDateString("de-DE", { month: "long" }) +
+            "<br><small>" +
+            m.date.getFullYear() +
+            "</small></button></th>",
+        )
+        .join("");
+    $("overviewRange").textContent =
+      monthFmt.format(monthList[0].date) +
+      " bis " +
+      monthFmt.format(monthList[monthList.length - 1].date);
+    let out = totalRow("Kontostand", "balance-row", (_s, k) =>
+      openingBalance(k),
+    );
+    out += incomes.map((x) => entryRow(x, "income")).join("");
+    out += totalRow("Summe Einnahmen", "income-total", (s) => s.inc);
+    out += expenses.map((x) => entryRow(x, "expense")).join("");
+    out += totalRow("Summe Ausgaben", "expense-total", (s) => s.out);
+    out += totalRow("Monatsergebnis", "result-row", (s) => s.inc - s.out);
+    out += totalRow("Kontostand Monatsende", "closing-row", (_s, k) =>
+      balanceAt(k),
+    );
+    $("months").innerHTML = out;
     document.querySelectorAll("[data-month]").forEach(
       (button) =>
         (button.onclick = () => {
@@ -300,6 +363,9 @@
           window.scrollTo({ top: 0, behavior: "smooth" });
         }),
     );
+    $("months")
+      .querySelectorAll("[data-edit]")
+      .forEach((cell) => (cell.onclick = () => edit(cell.dataset.edit)));
   }
   function renderSavings() {
     const g = {};
@@ -355,6 +421,83 @@
     $("savingTargetLabel").classList.toggle("hidden", !saving);
     $("savingGoal").required = saving;
   }
+  function closeBookingPanel() {
+    $("bookingPanel").classList.add("hidden");
+    $("existingBookingArea").classList.add("hidden");
+    $("bookingModeChoice").classList.remove("hidden");
+    $("bookBtn").classList.remove("hidden");
+  }
+  function bookOccurrence(x, occurrenceDate) {
+    const key = bookingKey(x.id, occurrenceDate);
+    if (bookings.some((b) => b.key === key)) return;
+    const month = occurrenceDate.slice(0, 7),
+      signed = x.kind === "income" ? x.amount : -x.amount;
+    monthlyBalances[month] = openingBalance(month) + signed;
+    bookings.push({
+      key,
+      entryId: x.id,
+      occurrenceDate,
+      month,
+      kind: x.kind,
+      amount: x.amount,
+      category: x.category,
+      item: x.item,
+      usage: x.usage,
+      savingGoal: x.savingGoal,
+      bookedAt: new Date().toISOString(),
+    });
+  }
+  function renderBookingList() {
+    const m = monthKey(shown),
+      items = entries.flatMap((x) => {
+        const dates = occurrenceDates(x, m);
+        return (dates.length ? dates : [dateInMonth(x, m)]).map(
+          (occurrenceDate) => ({
+            entry: x,
+            occurrenceDate,
+            booked: isBooked(x.id, occurrenceDate),
+            additional: !dates.length,
+          }),
+        );
+      });
+    $("bookingEmpty").classList.toggle("hidden", !!items.length);
+    $("bookingList").innerHTML = items
+      .sort((a, b) => a.occurrenceDate.localeCompare(b.occurrenceDate))
+      .map(
+        (v) =>
+          '<button type="button" class="booking-item ' +
+          (v.booked ? "booked" : "") +
+          '" data-book-entry="' +
+          v.entry.id +
+          '" data-book-date="' +
+          v.occurrenceDate +
+          '" ' +
+          (v.booked ? "disabled" : "") +
+          "><span>" +
+          safe(v.entry.item || v.entry.category) +
+          "<small>" +
+          new Date(v.occurrenceDate + "T12:00").toLocaleDateString("de-DE") +
+          (v.additional ? " · zusätzliche Buchung" : "") +
+          " · " +
+          (v.booked ? "Gebucht" : "Offen") +
+          '</small></span><span class="booking-amount">' +
+          (v.entry.kind === "income" ? "+" : "−") +
+          cash.format(v.entry.amount) +
+          "</span></button>",
+      )
+      .join("");
+    $("bookingList")
+      .querySelectorAll("[data-book-entry]:not(:disabled)")
+      .forEach(
+        (button) =>
+          (button.onclick = () => {
+            const x = entries.find((e) => e.id === button.dataset.bookEntry);
+            if (!x) return;
+            bookOccurrence(x, button.dataset.bookDate);
+            save();
+          }),
+      );
+  }
   function setKind(v) {
     kind = v;
     $("expenseBtn").classList.toggle("active", v === "expense");
@@ -364,6 +507,7 @@
   }
   function reset() {
     editing = "";
+    bookAfterSave = false;
     [
       "amount",
       "item",
@@ -392,6 +536,7 @@
     $("transactionChoice").classList.add("hidden");
     $("newTransactionBtn").classList.add("hidden");
     $("entryForm").classList.remove("hidden");
+    $("cancelBtn").classList.remove("hidden");
     $("formLabel").textContent = "Neuer Umsatz";
     $("kindTitle").textContent = v === "income" ? "Einnahme" : "Ausgabe";
   }
@@ -453,8 +598,7 @@
     e.preventDefault();
     const v = number($("balanceInput").value);
     if (Number.isFinite(v)) {
-      opening = v;
-      localStorage.setItem("fe-balance-month", monthKey(new Date()));
+      monthlyBalances[monthKey(shown)] = v;
       $("balanceInput").value = "";
       save();
     }
@@ -480,9 +624,12 @@
       endMonth: $("endMonth").value,
       stopDate: $("recurring").value === "no" ? "" : $("stopDate").value,
     };
-    entries = editing
+    const wasEditing = !!editing,
+      shouldBook = bookAfterSave && !wasEditing;
+    entries = wasEditing
       ? entries.map((a) => (a.id === editing ? x : a))
       : [...entries, x];
+    if (shouldBook) bookOccurrence(x, x.date);
     reset();
     save();
   };
@@ -490,6 +637,28 @@
     $("newTransactionBtn").classList.add("hidden");
     $("transactionChoice").classList.remove("hidden");
   };
+  $("choiceCancelBtn").onclick = reset;
+  $("bookBtn").onclick = () => {
+    $("bookBtn").classList.add("hidden");
+    $("bookingPanel").classList.remove("hidden");
+    $("bookingModeChoice").classList.remove("hidden");
+    $("existingBookingArea").classList.add("hidden");
+  };
+  $("existingPostBtn").onclick = () => {
+    $("bookingModeChoice").classList.add("hidden");
+    $("existingBookingArea").classList.remove("hidden");
+    renderBookingList();
+  };
+  $("newPostBtn").onclick = () => {
+    closeBookingPanel();
+    bookAfterSave = true;
+    $("newTransactionBtn").classList.add("hidden");
+    $("transactionChoice").classList.remove("hidden");
+    const currentMonth = monthKey(new Date());
+    $("date").value =
+      monthKey(shown) === currentMonth ? dateToday() : monthKey(shown) + "-01";
+  };
+  $("bookingCancelBtn").onclick = closeBookingPanel;
   $("expenseBtn").onclick = () => openNew("expense");
   $("incomeBtn").onclick = () => openNew("income");
   $("recurring").onchange = fields;
@@ -501,6 +670,14 @@
     render();
   };
   $("next").onclick = () => {
+    shown = new Date(shown.getFullYear(), shown.getMonth() + 1, 1);
+    render();
+  };
+  $("overviewPrev").onclick = () => {
+    shown = new Date(shown.getFullYear(), shown.getMonth() - 1, 1);
+    render();
+  };
+  $("overviewNext").onclick = () => {
     shown = new Date(shown.getFullYear(), shown.getMonth() + 1, 1);
     render();
   };
@@ -516,7 +693,22 @@
         weekday: x.weekday ?? new Date(x.date + "T12:00").getDay(),
       }),
     );
-    opening = Number(localStorage.getItem("fe-balance") || 0);
+    monthlyBalances = JSON.parse(
+      localStorage.getItem("fe-month-balances") || "{}",
+    );
+    bookings = JSON.parse(localStorage.getItem("fe-bookings") || "[]");
+    if (!Object.keys(monthlyBalances).length) {
+      const legacy = Number(localStorage.getItem("fe-balance") || 0);
+      if (legacy) {
+        const anchor =
+          localStorage.getItem("fe-balance-month") || monthKey(new Date());
+        monthlyBalances[anchor] = legacy;
+        localStorage.setItem(
+          "fe-month-balances",
+          JSON.stringify(monthlyBalances),
+        );
+      }
+    }
   } catch (_) {
     entries = [];
   }
